@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 import time
 from typing import Any
@@ -65,6 +66,30 @@ def _parse_json_args(args: str) -> dict:
     # 4. Normalized + strip markdown fences
     cleaned = _strip_markdown_fences(normalized_str)
     return json.loads(cleaned)
+
+
+def _extract_json_object(text: str, required_keys: set[str] | None = None) -> dict:
+    """Extract a schema-shaped JSON object from reasoning or markdown output."""
+    decoder = json.JSONDecoder()
+    candidates = []
+    for match in re.finditer(r"\{", text or ""):
+        try:
+            value, _ = decoder.raw_decode(text[match.start():])
+            if isinstance(value, dict):
+                candidates.append(value)
+        except json.JSONDecodeError:
+            continue
+    if required_keys:
+        matching = [value for value in candidates if required_keys.issubset(value)]
+        if matching:
+            return matching[-1]
+    if candidates:
+        return candidates[-1]
+    raise json.JSONDecodeError("No JSON object found", text or "", 0)
+
+
+def _prompt_tool_fallback_enabled() -> bool:
+    return os.getenv("MLEVOLVE_ALLOW_PROMPT_TOOL_FALLBACK", "").lower() in {"1", "true", "yes"}
 
 # Return type aligned with gemini.query
 OutputType = str | dict
@@ -147,12 +172,27 @@ def query(
     if extra_body:
         params["extra_body"] = extra_body
     if func_spec is not None:
-        tool_dict = func_spec.as_openai_tool_dict
-        if not supports_json_schema(model):
-            tool_dict.pop("strict", None)
-        params["tools"] = [tool_dict]
-        if supports_tool_choice_required(model):
-            params["tool_choice"] = func_spec.openai_tool_choice_dict
+        if _prompt_tool_fallback_enabled():
+            schema_text = json.dumps(func_spec.json_schema, ensure_ascii=True)
+            required_text = ", ".join(func_spec.json_schema.get("required", []))
+            fallback_prompt = (
+                "Return exactly one JSON object matching this schema. Do not use markdown, "
+                "explanations, or code fences. The object MUST contain these keys: "
+                + required_text + ".\nSchema: "
+                + schema_text
+            )
+            messages.append({"role": "user", "content": fallback_prompt})
+            params["extra_body"] = {"enable_thinking": False, "think": False}
+            params["response_format"] = {"type": "json_object"}
+            params.pop("tools", None)
+            params.pop("tool_choice", None)
+        else:
+            tool_dict = func_spec.as_openai_tool_dict
+            if not supports_json_schema(model):
+                tool_dict.pop("strict", None)
+            params["tools"] = [tool_dict]
+            if supports_tool_choice_required(model):
+                params["tool_choice"] = func_spec.openai_tool_choice_dict
 
     t0 = time.time()
     logger.info(f"Querying OpenAI-compatible API with model: {model}")
@@ -172,16 +212,24 @@ def query(
         output = message.content or ""
         logger.info(f"OpenAI response: {output}", extra={"verbose": True})
     else:
-        if not message.tool_calls:
-            raise ValueError("Expected function call, got no tool_calls")
-        tc = message.tool_calls[0]
-        if tc.function.name != func_spec.name:
-            raise ValueError(f"Function name mismatch: expected {func_spec.name}, got {tc.function.name}")
-        try:
-            output = _parse_json_args(tc.function.arguments or "{}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid function arguments: {tc.function.arguments}")
-            raise e
+        if _prompt_tool_fallback_enabled():
+            required_keys = set(func_spec.json_schema.get("required", []))
+            output = _extract_json_object(message.content or "", required_keys)
+            logger.warning(
+                "Model did not use function calling; parsed prompt-only JSON fallback for %s",
+                func_spec.name,
+            )
+        else:
+            if not message.tool_calls:
+                raise ValueError("Expected function call, got no tool_calls")
+            tc = message.tool_calls[0]
+            if tc.function.name != func_spec.name:
+                raise ValueError(f"Function name mismatch: expected {func_spec.name}, got {tc.function.name}")
+            try:
+                output = _parse_json_args(tc.function.arguments or "{}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid function arguments: {tc.function.arguments}")
+                raise e
         logger.info(f"OpenAI function call response: {output}", extra={"verbose": True})
 
     in_tok = getattr(completion.usage, "prompt_tokens", 0) or 0

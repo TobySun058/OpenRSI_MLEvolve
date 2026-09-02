@@ -72,7 +72,15 @@ def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
     if isinstance(prompt, str):
         return prompt.strip() + "\n"
     elif isinstance(prompt, list):
-        return "\n".join([f"- {s.strip()}" for s in prompt] + ["\n"])
+        return "\n".join([f"- {compile_prompt_to_md(s, _header_depth=_header_depth + 1).strip()}" for s in prompt] + ["\n"])
+    elif isinstance(prompt, tuple):
+        return "\n".join([f"- {compile_prompt_to_md(s, _header_depth=_header_depth + 1).strip()}" for s in prompt] + ["\n"])
+    elif isinstance(prompt, bool):
+        return ("true" if prompt else "false") + "\n"
+    elif prompt is None:
+        return "null\n"
+    elif isinstance(prompt, (int, float)):
+        return f"{prompt}\n"
 
     out = []
     header_prefix = "#" * _header_depth

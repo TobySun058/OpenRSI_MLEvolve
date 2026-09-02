@@ -104,9 +104,12 @@ def run(agent, node: SearchNode) -> str:
 
             if needs_revision:
                 if revised_code and revised_code.strip():
-                    if use_diff_for_review and (
-                        "<<<<<<< SEARCH" in revised_code or "< SEARCH" in revised_code
-                        ):
+                    has_diff_markers = (
+                        "<<<<<<< SEARCH" in revised_code
+                        or "< SEARCH" in revised_code
+                        or "<<<<<<<" in revised_code
+                    )
+                    if has_diff_markers:
                         try:
                             logger.info("Code review returned diff format, applying patch")
                             patcher = SearchReplacePatcher()

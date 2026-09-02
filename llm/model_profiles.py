@@ -32,6 +32,20 @@ _PROFILES: dict[str, dict] = {
         },
     },
 
+    # Frontis-MA1 is a Qwen3-derived reasoning model, but its served name does
+    # not start with "qwen". Keep an explicit profile so the model name remains
+    # truthful at the API boundary.
+    "frontis": {
+        "thinking": {
+            "temperature": 0.6, "top_p": 0.95, "top_k": 20,
+            "presence_penalty": 0.0, "enable_thinking": True,
+        },
+        "non_thinking": {
+            "temperature": 0.7, "top_p": 0.8, "top_k": 20,
+            "presence_penalty": 1.5, "enable_thinking": False,
+        },
+    },
+
     # ── GPT series ───
     "gpt": {
         "thinking": {
@@ -86,6 +100,7 @@ _PROFILES: dict[str, dict] = {
 # Synced from agentic-mle llm_client.py _MODEL_CONFIGS.
 _THINKING_EXTRA_BODY: dict[str, dict] = {
     "qwen":     {"enable_thinking": True},
+    "frontis":  {"enable_thinking": True},
     "kimi":     {},                          # Kimi enables thinking by default
     "deepseek": {"thinking": {"type": "enabled"}, "reasoning_effort": "high"},
     "gpt":      {},
@@ -100,7 +115,7 @@ _NO_JSON_SCHEMA_PREFIXES = ("deepseek",)
 # Models where thinking mode and json_schema are mutually exclusive.
 # generate() will drop json_schema for these models to keep thinking enabled,
 # relying on prompt instructions + post-processing for JSON extraction.
-_THINKING_JSON_INCOMPATIBLE = ("qwen",)
+_THINKING_JSON_INCOMPATIBLE = ("qwen", "frontis")
 
 # Models that don't support tool_choice="required" / specific function targeting.
 # Claude with extended thinking only supports tool_choice="auto" or "none";

@@ -387,6 +387,12 @@ def run(agent, node: SearchNode, exec_result: ExecutionResult) -> SearchNode:
                 "Introduction": introduction,
                 "Implementation": wrap_code(node.code),
                 "Execution output": wrap_code(node.term_out, lang=""),
+                "Execution details": {
+                    "execution_success": node.exc_type is None,
+                    "exc_type": node.exc_type,
+                    "exc_info": node.exc_info,
+                    "exc_stack": node.exc_stack,
+                },
             }
 
             response = cast(

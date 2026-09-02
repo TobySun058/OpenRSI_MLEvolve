@@ -67,7 +67,6 @@ logs/
 
 # ===== Project Specific =====
 cache/
-scripts/
 workspace/
 workspaces/
 test_workspace/
