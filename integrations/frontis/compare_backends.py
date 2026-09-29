@@ -10,8 +10,8 @@ import tempfile
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SMOKE = ROOT / "scripts" / "run_frontis_smoke.py"
+ROOT = Path(__file__).resolve().parents[2]
+SMOKE = ROOT / "integrations" / "frontis" / "smoke_test.py"
 
 
 def _run_smoke(model: str, base_url: str, api_key: str, result_file: Path) -> dict:
